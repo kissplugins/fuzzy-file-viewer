@@ -1,12 +1,12 @@
 === KISS Fuzzy File Viewer ===
-Contributors:      KISS Plugins
-Tags:              directory, files, shortcode, download, viewer, admin, cache, uploads
-Requires at least: 5.2
-Tested up to:      6.5
-Requires PHP:      7.2
-Stable tag:        1.0.1
-License:           GPLv2 or later
-License URI:       https://www.gnu.org/licenses/gpl-2.0.html
+Contributors:      KISS Plugins 
+Tags:              directory, files, shortcode, download, viewer, admin, cache, uploads 
+Requires at least: 5.2 
+Tested up to:      6.5 
+Requires PHP:      7.2 
+Stable tag:        1.0.1 
+License:           GPLv2 or later 
+License URI:       https://www.gnu.org/licenses/gpl-2.0.html 
 
 Scans the /wp-content/uploads/coas/ directory, lists files on an admin page, and provides a shortcode [coas name="filename"] to link to files with fuzzy matching.
 
