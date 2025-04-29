@@ -92,7 +92,7 @@ It uses PHP's `similar_text()` function to compare the normalized `name` attribu
 = 1.0.1 - 2025-04-28 =
 * Fix: Ensure correct trailing slash in generated file URLs.
 
-= 1.0.0 - 2025-MM-DD =
+= 1.0.0 - 2025-04-28 =
 * Initial release.
 * Admin page for viewing files in `/wp-content/uploads/coas/`.
 * `[coas name="..."]` shortcode with fuzzy matching.
