@@ -1,6 +1,5 @@
-=== COAS Directory Viewer ===
-Contributors:      (Your Name or Company)
-Donate link:       https://example.com/donate
+=== KISS Fuzzy File Viewer ===
+Contributors:      KISS Plugins
 Tags:              directory, files, shortcode, download, viewer, admin, cache, uploads
 Requires at least: 5.2
 Tested up to:      6.5
@@ -13,7 +12,7 @@ Scans the /wp-content/uploads/coas/ directory, lists files on an admin page, and
 
 == Description ==
 
-The COAS Directory Viewer plugin provides a simple way to manage and display links to files stored in a specific subdirectory (`/wp-content/uploads/coas/`) of your WordPress uploads folder.
+The KISS Fuzzy File Viewer plugin provides a simple way to manage and display links to files stored in a specific subdirectory (`/wp-content/uploads/coas/`) of your WordPress uploads folder.
 
 Features:
 
