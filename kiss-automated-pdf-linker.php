@@ -3,7 +3,7 @@
  * Plugin Name:       KISS Automated PDF Linker
  * Plugin URI:        https://example.com/plugins/kiss-automated-pdf-linker/
  * Description:       Scans selected upload directories for PDF files and provides a shortcode [kiss_pdf name="filename"] to link to them using fuzzy matching.
- * Version:           2.0.1
+ * Version:           1.02 // Incremented version
  * Requires at least: 5.2
  * Requires PHP:      7.4  // Increased requirement due to RecursiveDirectoryIterator usage
  * Author:            KISS / Neochrome, Inc.
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // ==========================================================================
 
 /** @var string Plugin version. */
-define( 'KAPL_VERSION', '2.0.0' );
+define( 'KAPL_VERSION', '1.02' ); // Incremented version constant
 /** @var string Plugin directory path. */
 define( 'KAPL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 /** @var string Plugin directory URL. */
@@ -103,7 +103,7 @@ function kapl_register_settings() {
 		KAPL_SETTINGS_SLUG,                 // Page slug
 		'kapl_directory_selection_section'  // Section ID where field appears
 	);
-    
+
     // Add settings section for appearance customization
     add_settings_section(
         'kapl_appearance_section',          // Section ID
@@ -111,7 +111,7 @@ function kapl_register_settings() {
         'kapl_appearance_section_callback', // Callback for section description
         KAPL_SETTINGS_SLUG                  // Page slug where section appears
     );
-    
+
     // Add the field for PDF link color
     add_settings_field(
         'kapl_link_color',                  // Field ID
@@ -143,7 +143,7 @@ function kapl_sanitize_settings( $input ) {
 	} else {
 		$sanitized_input['selected_directories'] = []; // Default to empty array if not set or not an array
 	}
-    
+
     // Sanitize the link color (ensure it's a valid hex color)
     if ( isset( $input['link_color'] ) ) {
         // If the value doesn't start with #, add it
@@ -245,14 +245,14 @@ function kapl_appearance_section_callback() {
 function kapl_link_color_field_callback() {
     $settings = get_option( KAPL_SETTINGS_OPTION_NAME, ['link_color' => '#0000FF'] );
     $link_color = isset( $settings['link_color'] ) ? $settings['link_color'] : '#0000FF';
-    
+
     ?>
-    <input 
-        type="text" 
-        name="<?php echo esc_attr( KAPL_SETTINGS_OPTION_NAME ); ?>[link_color]" 
-        id="kapl_link_color" 
-        value="<?php echo esc_attr( $link_color ); ?>" 
-        class="kapl-color-picker" 
+    <input
+        type="text"
+        name="<?php echo esc_attr( KAPL_SETTINGS_OPTION_NAME ); ?>[link_color]"
+        id="kapl_link_color"
+        value="<?php echo esc_attr( $link_color ); ?>"
+        class="kapl-color-picker"
     />
     <p class="description">
         <?php esc_html_e( 'Choose the color for PDF links. This will be applied to all links with the kapl-pdf-link class.', 'kiss-automated-pdf-linker' ); ?>
@@ -271,11 +271,11 @@ function kapl_enqueue_admin_scripts( $hook ) {
     if ( 'settings_page_' . KAPL_SETTINGS_SLUG !== $hook ) {
         return;
     }
-    
+
     // Enqueue color picker
     wp_enqueue_style( 'wp-color-picker' );
     wp_enqueue_script( 'wp-color-picker' );
-    
+
     // Enqueue our custom script to initialize color picker
     wp_enqueue_script(
         'kapl-admin-script',
@@ -284,7 +284,7 @@ function kapl_enqueue_admin_scripts( $hook ) {
         KAPL_VERSION,
         true
     );
-    
+
     // Initialize color picker
     wp_add_inline_script( 'kapl-admin-script', '
         jQuery(document).ready(function($) {
@@ -301,7 +301,7 @@ function kapl_enqueue_admin_scripts( $hook ) {
 function kapl_enqueue_frontend_styles() {
     $settings = get_option( KAPL_SETTINGS_OPTION_NAME, ['link_color' => '#0000FF'] );
     $link_color = isset( $settings['link_color'] ) ? $settings['link_color'] : '#0000FF';
-    
+
     // Add inline CSS for the PDF links
     $custom_css = "
         .kapl-pdf-link {
@@ -312,7 +312,7 @@ function kapl_enqueue_frontend_styles() {
             opacity: 0.8;
         }
     ";
-    
+
     wp_register_style( 'kapl-frontend-styles', false ); // Register an empty handle
     wp_enqueue_style( 'kapl-frontend-styles' );
     wp_add_inline_style( 'kapl-frontend-styles', $custom_css );
@@ -340,12 +340,12 @@ function kapl_add_admin_menu() {
 }
 
 /**
- * Renders the HTML content for the plugin settings page.
+ * Renders the HTML content for the plugin settings page with tabs.
  *
  * Uses the Settings API functions (settings_fields, do_settings_sections)
- * and includes a manual "Rebuild Index" button.
+ * and includes a manual "Rebuild Index" button and an "Indexed PDFs" tab.
  *
- * @since 2.0.0
+ * @since 2.0.1 // Updated @since tag for clarity
  */
 function kapl_settings_page_html() {
 	// Check user capabilities
@@ -354,15 +354,18 @@ function kapl_settings_page_html() {
 		return;
 	}
 
-    // Handle index rebuilding action
+    // Determine the active tab
+    $active_tab = isset( $_GET['tab'] ) ? sanitize_key( $_GET['tab'] ) : 'settings';
+
+    // Handle index rebuilding action (remains the same)
     $index_rebuilt = false;
-    if ( isset( $_POST['kapl_rebuild_index_nonce'], $_POST['kapl_rebuild_index'] ) &&
+    if ( 'settings' === $active_tab && // Only process rebuild on the main settings tab submission
+         isset( $_POST['kapl_rebuild_index_nonce'], $_POST['kapl_rebuild_index'] ) &&
          wp_verify_nonce( sanitize_key( $_POST['kapl_rebuild_index_nonce'] ), 'kapl_rebuild_index_action' ) )
     {
         $result = kapl_build_pdf_index(); // Rebuild the index
         if ( ! is_wp_error( $result ) ) {
             $index_rebuilt = true;
-            // $result here is the count of indexed files
             $rebuild_message = sprintf(
                 /* translators: %d: number of PDF files indexed */
                 esc_html__( 'PDF index rebuilt successfully. Found %d PDF files.', 'kiss-automated-pdf-linker' ),
@@ -373,6 +376,12 @@ function kapl_settings_page_html() {
             // Display error message from WP_Error
              add_settings_error( 'kapl_rebuild_status', 'rebuild_error', esc_html__( 'Error rebuilding index: ', 'kiss-automated-pdf-linker' ) . $result->get_error_message(), 'error' );
         }
+        // Redirect to prevent form resubmission on refresh and clear POST data
+        // Redirect back to the settings tab
+        // wp_redirect( admin_url( 'options-general.php?page=' . KAPL_SETTINGS_SLUG . '&tab=settings&rebuilt=1' ) );
+       // exit;
+        // Note: Redirecting might be cleaner but complicates showing the success/error message directly.
+        // Showing the message directly without redirect is simpler for this example.
     }
 
 	?>
@@ -380,49 +389,98 @@ function kapl_settings_page_html() {
         <h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
 
         <?php settings_errors( 'kapl_rebuild_status' ); // Display rebuild status messages ?>
+         <?php // settings_errors(); // Display standard settings API messages (like "Settings saved.") ?>
 
-        <form method="post" action="options.php">
+        <?php // Tab Navigation ?>
+        <h2 class="nav-tab-wrapper">
+            <a href="?page=<?php echo esc_attr( KAPL_SETTINGS_SLUG ); ?>&tab=settings" class="nav-tab <?php echo $active_tab == 'settings' ? 'nav-tab-active' : ''; ?>">
+                <?php esc_html_e( 'Settings & Indexing', 'kiss-automated-pdf-linker' ); ?>
+            </a>
+            <a href="?page=<?php echo esc_attr( KAPL_SETTINGS_SLUG ); ?>&tab=indexed_pdfs" class="nav-tab <?php echo $active_tab == 'indexed_pdfs' ? 'nav-tab-active' : ''; ?>">
+                <?php esc_html_e( 'Indexed PDFs', 'kiss-automated-pdf-linker' ); ?>
+            </a>
+        </h2>
+
+        <?php // Tab Content ?>
+        <?php if ( $active_tab == 'settings' ) : ?>
+
+            <form method="post" action="options.php">
+                <?php
+                // Output necessary hidden fields for the Settings API (nonce, action, etc.)
+                settings_fields( 'kapl_settings_group' ); //
+                // Output the settings sections and fields for this page
+                do_settings_sections( KAPL_SETTINGS_SLUG ); //
+                // Submit button for saving directory selections
+                submit_button( __( 'Save Settings', 'kiss-automated-pdf-linker' ) ); //
+                ?>
+            </form>
+
+            <hr> <?php // Visual separator ?>
+
+            <h2><?php esc_html_e( 'PDF Index Management', 'kiss-automated-pdf-linker' ); ?></h2>
+            <p><?php esc_html_e( 'After saving directory selections, click the button below to scan the selected folders and build the PDF index used by the shortcode.', 'kiss-automated-pdf-linker' ); ?></p>
+            <p><?php esc_html_e( 'You should rebuild the index whenever you add, remove, or rename PDF files in the selected directories.', 'kiss-automated-pdf-linker' ); ?></p>
+
+            <?php // Index rebuilding form (separate from settings form) ?>
+            <form method="post" action="?page=<?php echo esc_attr( KAPL_SETTINGS_SLUG ); ?>&tab=settings"> <?php // Ensure action points back correctly ?>
+                <?php wp_nonce_field( 'kapl_rebuild_index_action', 'kapl_rebuild_index_nonce' ); ?>
+                <p>
+                    <button type="submit" name="kapl_rebuild_index" class="button button-primary">
+                        <?php esc_html_e( 'Rebuild PDF Index Now', 'kiss-automated-pdf-linker' ); ?>
+                    </button>
+                </p>
+            </form>
+
+             <?php // Display current index status (optional) ?>
+             <?php
+                $index_data = kapl_get_pdf_index(); //
+                if ( is_array( $index_data ) ) {
+                    echo '<p><em>' . sprintf(
+                        /* translators: %d: number of files in the current index */
+                        esc_html__( 'Current index contains %d PDF files.', 'kiss-automated-pdf-linker' ),
+                        count( $index_data )
+                    ) . '</em></p>';
+                } else {
+                     echo '<p><em>' . esc_html__( 'No index found or index is invalid. Please rebuild the index.', 'kiss-automated-pdf-linker' ) . '</em></p>';
+                }
+             ?>
+
+        <?php elseif ( $active_tab == 'indexed_pdfs' ) : ?>
+
+            <h2><?php esc_html_e( 'Currently Indexed PDF Files', 'kiss-automated-pdf-linker' ); ?></h2>
+            <p><?php esc_html_e( 'This list shows the PDFs found during the last index rebuild.', 'kiss-automated-pdf-linker' ); ?></p>
+
             <?php
-            // Output necessary hidden fields for the Settings API (nonce, action, etc.)
-            settings_fields( 'kapl_settings_group' );
-            // Output the settings sections and fields for this page
-            do_settings_sections( KAPL_SETTINGS_SLUG );
-            // Submit button for saving directory selections
-            submit_button( __( 'Save Settings', 'kiss-automated-pdf-linker' ) );
-            ?>
-        </form>
+            $index_data = kapl_get_pdf_index(); // Get the index data
 
-        <hr> <?php // Visual separator ?>
-
-        <h2><?php esc_html_e( 'PDF Index Management', 'kiss-automated-pdf-linker' ); ?></h2>
-        <p><?php esc_html_e( 'After saving directory selections, click the button below to scan the selected folders and build the PDF index used by the shortcode.', 'kiss-automated-pdf-linker' ); ?></p>
-        <p><?php esc_html_e( 'You should rebuild the index whenever you add, remove, or rename PDF files in the selected directories.', 'kiss-automated-pdf-linker' ); ?></p>
-
-        <?php // Index rebuilding form (separate from settings form) ?>
-        <form method="post" action="">
-            <?php wp_nonce_field( 'kapl_rebuild_index_action', 'kapl_rebuild_index_nonce' ); ?>
-            <p>
-                <button type="submit" name="kapl_rebuild_index" class="button button-primary">
-                    <?php esc_html_e( 'Rebuild PDF Index Now', 'kiss-automated-pdf-linker' ); ?>
-                </button>
-            </p>
-        </form>
-
-         <?php // Display current index status (optional) ?>
-         <?php
-            $index_data = kapl_get_pdf_index();
-            if ( is_array( $index_data ) ) {
-                echo '<p><em>' . sprintf(
-                    /* translators: %d: number of files in the current index */
-                    esc_html__( 'Current index contains %d PDF files.', 'kiss-automated-pdf-linker' ),
-                    count( $index_data )
-                ) . '</em></p>';
+            if ( $index_data === null ) {
+                echo '<p>' . esc_html__( 'The PDF index has not been built yet. Please go to the Settings & Indexing tab and click "Rebuild PDF Index Now".', 'kiss-automated-pdf-linker' ) . '</p>';
+            } elseif ( empty( $index_data ) ) {
+                 echo '<p>' . esc_html__( 'No PDF files were found in the selected directories during the last index rebuild, or no directories are selected.', 'kiss-automated-pdf-linker' ) . '</p>';
             } else {
-                 echo '<p><em>' . esc_html__( 'No index found. Please rebuild the index.', 'kiss-automated-pdf-linker' ) . '</em></p>';
-            }
-         ?>
+                echo '<p>' . sprintf(
+                    /* translators: %d: number of files in the current index */
+                    esc_html__( 'Found %d PDF files in the index:', 'kiss-automated-pdf-linker' ),
+                    count( $index_data )
+                ) . '</p>';
 
-    </div><?php
+                echo '<ul style="list-style: disc; margin-left: 20px;">';
+                foreach ( $index_data as $pdf_item ) {
+                    // Display the relative path for clarity
+                    if ( isset( $pdf_item['path'] ) ) {
+                        echo '<li><code>' . esc_html( $pdf_item['path'] ) . '</code></li>'; //
+                    } elseif ( isset( $pdf_item['filename'] ) ) {
+                         // Fallback if path is missing for some reason
+                        echo '<li><code>' . esc_html( $pdf_item['filename'] ) . '</code></li>'; //
+                    }
+                }
+                echo '</ul>';
+            }
+            ?>
+
+        <?php endif; // End tab content ?>
+
+    </div><?php // End .wrap
 }
 
 
