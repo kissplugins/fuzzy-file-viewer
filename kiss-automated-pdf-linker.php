@@ -304,10 +304,12 @@ function kapl_enqueue_frontend_styles() {
     
     // Add inline CSS for the PDF links
     $custom_css = "
-        .kapl-pdf-link {
-            color: {$link_color};
+			  .single-product .woocommerce-tabs.accordion-type ul.tabs > li .woocommerce-Tabs-panel a.kapl-pdf-link,
+			  .kapl-pdf-link {
+            color: {$link_color} !important;
             text-decoration: underline;
         }
+				
         .kapl-pdf-link:hover {
             opacity: 0.8;
         }
