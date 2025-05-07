@@ -120,6 +120,24 @@ function kapl_register_settings() {
         KAPL_SETTINGS_SLUG,                 // Page slug
         'kapl_appearance_section'           // Section ID where field appears
     );
+
+	add_settings_section(
+        'kapl_pdf_matching_section',       // Section ID
+        __( 'PDF Matching Settings', 'kiss-automated-pdf-linker' ), // Section title
+        '', // No callback for section description
+        KAPL_SETTINGS_SLUG                  // Page slug where section appears
+    );
+
+    // Add the field for using product title for file match
+    add_settings_field(
+        'kapl_use_product_title_match',     // Field ID
+        __( 'Use product title for file match:', 'kiss-automated-pdf-linker' ), // Field label
+        'kapl_use_product_title_field_callback', // Callback to render the field
+        KAPL_SETTINGS_SLUG,                 // Page slug
+        'kapl_pdf_matching_section'           // Section ID where field appears
+    );
+
+	
 }
 
 /**
@@ -152,6 +170,9 @@ function kapl_sanitize_settings( $input ) {
     } else {
         $sanitized_input['link_color'] = '#0000FF'; // Default color
     }
+
+    // Sanitize the use_product_title_match checkbox
+    $sanitized_input['use_product_title_match'] = isset( $input['use_product_title_match'] ) ? true : false;
 
 	// Add sanitization for future settings here...
 
@@ -256,6 +277,32 @@ function kapl_link_color_field_callback() {
     />
     <p class="description">
         <?php esc_html_e( 'Choose the color for PDF links. This will be applied to all links with the kapl-pdf-link class.', 'kiss-automated-pdf-linker' ); ?>
+    </p>
+    <?php
+}
+
+/**
+ * Callback function to render the checkbox for using product title for file match.
+ *
+ * @since 2.0.1
+ */
+function kapl_use_product_title_field_callback() {
+    $settings = get_option( KAPL_SETTINGS_OPTION_NAME, ['use_product_title_match' => false] );
+    $use_product_title_match = isset( $settings['use_product_title_match'] ) ? (bool) $settings['use_product_title_match'] : false;
+    
+    ?>
+    <label for="kapl_use_product_title_match">
+        <input 
+            type="checkbox" 
+            name="<?php echo esc_attr( KAPL_SETTINGS_OPTION_NAME ); ?>[use_product_title_match]" 
+            id="kapl_use_product_title_match" 
+            value="1" 
+            <?php checked( $use_product_title_match, true ); ?>
+        />
+        <?php esc_html_e( 'Enable automatic PDF linking for strains in the product tab.', 'kiss-automated-pdf-linker' ); ?>
+    </label>
+    <p class="description">
+        <?php esc_html_e( 'When enabled, this will attempt to automatically link strain names listed in the \'Strains\' product tab to matching PDF files.', 'kiss-automated-pdf-linker' ); ?>
     </p>
     <?php
 }
@@ -725,7 +772,8 @@ function kapl_activate() {
     if ( false === get_option( KAPL_SETTINGS_OPTION_NAME ) ) {
         update_option( KAPL_SETTINGS_OPTION_NAME, [
             'selected_directories' => [],
-            'link_color' => '#0000FF' // Add default color
+            'link_color' => '#0000FF', // Add default color
+            'use_product_title_match' => false // Add default for new setting
         ]);
     }
     // Optionally, clear any old index from previous versions if names were different
@@ -775,4 +823,122 @@ function kapl_add_settings_link( $links ) {
 	array_unshift( $links, $settings_link );
 
 	return $links;
+}
+
+/**
+ * Customize strains tabs
+ */
+add_filter( 'woocommerce_product_tabs', 'kapl_customize_strain_tab', 98 );
+function kapl_customize_strain_tab( $tabs ) {
+
+	$setting_enabled = get_option( KAPL_SETTINGS_OPTION_NAME, ['use_product_title_match' => false] );
+
+	if ( $setting_enabled['use_product_title_match'] ) {
+		$tabs['strains']['callback'] = 'kapl_strain_tab_content';	// Custom description callback
+	}
+
+	return $tabs;
+}
+
+function kapl_strain_tab_content() {
+	global $product;
+
+	$product_id = $product->get_id();
+
+	$disable_pdf_linking = get_field( 'disable_coas_pdf_links', $product_id );
+	$strain_fields = get_field( 'product_strains', $product_id );
+
+	if ( $disable_pdf_linking ) {
+		echo $strain_fields;
+		return;
+	}
+
+	$product_title = $product->get_name();
+	
+	$pdf_index = kapl_get_pdf_index();
+	
+	$upload_dir_info = wp_upload_dir();
+	$uploads_base_url = trailingslashit( $upload_dir_info['baseurl'] );
+
+	$can_link_pdfs = ( $pdf_index !== null && ! empty( $pdf_index ) );
+	
+	$p_tag_pattern = '/<p>(.*?)<\/p>/i';
+	preg_match_all( $p_tag_pattern, $strain_fields, $matches );
+
+	echo '<div class="product-strains">';
+
+	if ( ! empty( $matches[1] ) ) {
+		foreach ( $matches[1] as $line_content ) {
+			$decoded_line_content = html_entity_decode( $line_content, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+			$line = trim( strip_tags( $decoded_line_content ) );
+
+			if ( empty( $line ) ) {
+				continue;
+			}
+			
+			$strain_name = '';
+			$strain_details = '';
+			$separator_found = false;
+
+			$strain_split_pattern = '/^(.+?)([\s]*–.*)$/u';
+
+			if ( preg_match( $strain_split_pattern, $line, $split_matches ) ) {
+				$strain_name = trim( $split_matches[1] );
+				$strain_details = $split_matches[2];
+				$separator_found = true;
+			} else {
+				$pos = strpos( $line, '-' ); 
+				if ( $pos !== false ) {
+					$strain_name = trim( substr( $line, 0, $pos ) );
+					$strain_details = substr( $line, $pos ); 
+					$separator_found = true;
+				}
+			}
+
+			echo '<p>';
+
+			if ( $separator_found && ! empty( $strain_name ) && $can_link_pdfs ) {
+				$normalized_strain_name = kapl_normalize_filename( $strain_name );
+				
+				$best_match_item = null;
+				$highest_similarity = -1;
+				
+				foreach ( $pdf_index as $index_item ) {
+					if ( ! isset( $index_item['normalized_name'] ) || ! isset( $index_item['path'] ) ) {
+						continue;
+					}
+					
+					$normalized_file_name = $index_item['normalized_name'];
+					
+					// Check if the normalized strain name is a substring of the normalized file name.
+					if ( strpos( $normalized_file_name, $normalized_strain_name ) !== false) {
+						$best_match_item = $index_item;
+						break;
+					}
+				}
+				
+				if ( $best_match_item ) {
+					$matched_pdf_url = $best_match_item['path'];
+					$file_url = $uploads_base_url . ltrim( $matched_pdf_url, '/' );
+					
+					printf(
+						'<a href="%s" target="_blank" rel="noopener noreferrer" class="kapl-pdf-link">%s</a>%s',
+						esc_url( $file_url ),
+						esc_html( $strain_name ),
+						esc_html( $strain_details )
+					);
+				} else {
+					echo esc_html( $line );
+				}
+			} else {
+				echo esc_html( $line );
+			}
+
+			echo '</p>';
+		}
+	} else {
+	    echo wp_kses_post( $strain_fields );
+	}
+	
+	echo '</div>';
 }
