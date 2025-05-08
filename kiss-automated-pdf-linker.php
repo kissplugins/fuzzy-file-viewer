@@ -830,10 +830,12 @@ function kapl_add_settings_link( $links ) {
  */
 add_filter( 'woocommerce_product_tabs', 'kapl_customize_strain_tab', 98 );
 function kapl_customize_strain_tab( $tabs ) {
+	global $product;
+    $product_id = $product->get_id();
 
 	$setting_enabled = get_option( KAPL_SETTINGS_OPTION_NAME, ['use_product_title_match' => false] );
 
-	if ( $setting_enabled['use_product_title_match'] ) {
+	if ( get_field('product_strains', $product_id) && $setting_enabled['use_product_title_match'] ) {
 		$tabs['strains']['callback'] = 'kapl_strain_tab_content';	// Custom description callback
 	}
 
@@ -862,6 +864,11 @@ function kapl_strain_tab_content() {
 
 	$can_link_pdfs = ( $pdf_index !== null && ! empty( $pdf_index ) );
 	
+	$normalized_product_title = '';
+	if ( $can_link_pdfs && ! empty( $product_title ) ) {
+		$normalized_product_title = kapl_normalize_filename( $product_title );
+	}
+
 	$p_tag_pattern = '/<p>(.*?)<\/p>/i';
 	preg_match_all( $p_tag_pattern, $strain_fields, $matches );
 
@@ -876,32 +883,27 @@ function kapl_strain_tab_content() {
 				continue;
 			}
 			
-			$strain_name = '';
-			$strain_details = '';
-			$separator_found = false;
-
-			$strain_split_pattern = '/^(.+?)([\s]*–.*)$/u';
-
+			// We still need to parse strain name and details for display purposes,
+			// but matching will be done using product title.
+			$strain_name_display = $line; // Default to full line if no separator
+			$strain_details_display = '';
+			
+			$strain_split_pattern = '/^(.+?)([\s]*[^a-zA-Z0-9\\s].*)$/u';
 			if ( preg_match( $strain_split_pattern, $line, $split_matches ) ) {
-				$strain_name = trim( $split_matches[1] );
-				$strain_details = $split_matches[2];
-				$separator_found = true;
+				$strain_name_display = trim( $split_matches[1] );
+				$strain_details_display = $split_matches[2];
 			} else {
 				$pos = strpos( $line, '-' ); 
 				if ( $pos !== false ) {
-					$strain_name = trim( substr( $line, 0, $pos ) );
-					$strain_details = substr( $line, $pos ); 
-					$separator_found = true;
+					$strain_name_display = trim( substr( $line, 0, $pos ) );
+					$strain_details_display = substr( $line, $pos ); 
 				}
 			}
 
 			echo '<p>';
 
-			if ( $separator_found && ! empty( $strain_name ) && $can_link_pdfs ) {
-				$normalized_strain_name = kapl_normalize_filename( $strain_name );
-				
+			if ( $can_link_pdfs && ! empty( $normalized_product_title ) ) {
 				$best_match_item = null;
-				$highest_similarity = -1;
 				
 				foreach ( $pdf_index as $index_item ) {
 					if ( ! isset( $index_item['normalized_name'] ) || ! isset( $index_item['path'] ) ) {
@@ -910,10 +912,10 @@ function kapl_strain_tab_content() {
 					
 					$normalized_file_name = $index_item['normalized_name'];
 					
-					// Check if the normalized strain name is a substring of the normalized file name.
-					if ( strpos( $normalized_file_name, $normalized_strain_name ) !== false) {
+					// Check if the normalized product title is a substring of the normalized file name.
+					if ( strpos( $normalized_file_name, $normalized_product_title ) !== false) {
 						$best_match_item = $index_item;
-						break;
+						break; 
 					}
 				}
 				
@@ -924,8 +926,8 @@ function kapl_strain_tab_content() {
 					printf(
 						'<a href="%s" target="_blank" rel="noopener noreferrer" class="kapl-pdf-link">%s</a>%s',
 						esc_url( $file_url ),
-						esc_html( $strain_name ),
-						esc_html( $strain_details )
+						esc_html( $strain_name_display ),
+						esc_html( $strain_details_display )
 					);
 				} else {
 					echo esc_html( $line );
