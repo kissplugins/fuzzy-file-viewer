@@ -888,7 +888,7 @@ function kapl_strain_tab_content() {
 			$strain_name_display = $line; // Default to full line if no separator
 			$strain_details_display = '';
 			
-			$strain_split_pattern = '/^(.+?)([\s]*–.*)$/u';
+			$strain_split_pattern = '/^(.+?)([\s]*[^a-zA-Z0-9\\s].*)$/u';
 			if ( preg_match( $strain_split_pattern, $line, $split_matches ) ) {
 				$strain_name_display = trim( $split_matches[1] );
 				$strain_details_display = $split_matches[2];
