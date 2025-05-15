@@ -750,7 +750,7 @@ function kapl_normalize_filename( $filename ) {
 	// Remove file extension.
 	$filename = pathinfo( $filename, PATHINFO_FILENAME );
 	// Remove common separators.
-	$filename = str_replace( ['-', '–', '_', ' '], '', $filename );
+	$filename = preg_replace( '/[^a-zA-Z0-9]/', '', $filename );
 	return $filename;
 }
 
