@@ -730,28 +730,51 @@ function kapl_shortcode_handler( $atts, $content = null, $tag = '' ) {
 // ==========================================================================
 
 /**
- * Normalizes a filename for comparison purposes.
+ * Normalizes a filename or product title into a “slug‑style” string so that
+ * product titles like
+ *   “3.5 Gram THCA Disposable Vape (Limited Run) – Pressure”
+ * and file names like
+ *   “3.5 Gram THCA Disposable Vape (Limited Run) – Pressure.pdf”
+ * both become
+ *   3-5-gram-thca-disposable-vape-limited-run-pressure
  *
- * Converts the filename to lowercase, removes the file extension,
- * and strips out dashes, underscores, and spaces.
+ * Normalisation steps:
+ *  1. Split camelCase words by inserting a space before any upper‑case letter
+ *     that follows a lower‑case letter (e.g. “BlueBerry” → “Blue Berry”).
+ *  2. Lower‑case the whole string.
+ *  3. Strip the file extension, if present.
+ *  4. Replace every run of non‑alphanumeric characters with a single dash.
+ *  5. Trim leading/trailing dashes.
  *
- * @since 2.0.0 (Adapted from 1.0.0)
+ * @since 2.1.0
  *
- * @param string $filename The original filename (e.g., "My File_1.pdf").
- * @return string The normalized filename (e.g., "myfile1"). Returns empty string if input is not a string.
+ * @param string $filename Raw file name or product title.
+ * @return string Slug‑style string suitable for matching.
  */
 function kapl_normalize_filename( $filename ) {
-	// Ensure input is a string.
-	if ( ! is_string( $filename ) ) {
-		return '';
-	}
-	// Convert to lowercase.
-	$filename = strtolower( $filename );
-	// Remove file extension.
-	$filename = pathinfo( $filename, PATHINFO_FILENAME );
-	// Remove common separators.
-	$filename = preg_replace( '/[^a-zA-Z0-9]/', '', $filename );
-	return $filename;
+    if ( ! is_string( $filename ) ) {
+        return '';
+    }
+
+    // 1 ‑ split camelCase boundaries to ensure consistent word breaks.
+    $filename = preg_replace( '/([a-z])([A-Z])/', '$1 $2', $filename );
+
+    // 2 ‑ lower‑case for case‑insensitive matching.
+    $filename = strtolower( $filename );
+
+    // 3 ‑ remove the file extension, if any.
+    $filename = pathinfo( $filename, PATHINFO_FILENAME );
+
+    // 4 ‑ collapse all runs of non‑alphanumeric chars (spaces, punctuation,
+    //     en/em dashes, parentheses, dots, etc.) to a single “‑”.
+    $filename = preg_replace( '/[^a-z0-9]+/', '-', $filename );
+
+    // 5 ‑ trim stray leading/trailing dashes.
+    $filename = trim( $filename, '-' );
+
+    error_log("KAPL: Normalized filename: " . $filename);
+
+    return $filename;
 }
 
 
