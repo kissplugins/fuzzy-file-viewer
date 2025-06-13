@@ -3,7 +3,7 @@
  * Plugin Name:       KISS Automated PDF Linker
  * Plugin URI:        https://example.com/plugins/kiss-automated-pdf-linker/
  * Description:       Scans selected upload directories for PDF files and provides a shortcode [kiss_pdf name="filename"] to link to them using fuzzy matching.
- * Version:           2.1.0
+ * Version:           2.1.1
  * Requires at least: 5.2
  * Requires PHP:      7.4  // Increased requirement due to RecursiveDirectoryIterator usage
  * Author:            KISS / Neochrome, Inc.
@@ -24,7 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 // ==========================================================================
 
 /** @var string Plugin version. */
-define( 'KAPL_VERSION', '2.1.0' );
+define( 'KAPL_VERSION', '2.1.1' );
 /** @var string Plugin directory path. */
 define( 'KAPL_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 /** @var string Plugin directory URL. */
@@ -196,8 +196,8 @@ function kapl_directory_selection_section_callback() {
  * @since 2.0.0
  */
 function kapl_selected_directories_field_callback() {
-	$settings = get_option( KAPL_SETTINGS_OPTION_NAME, ['selected_directories' => []] );
-	$selected_dirs = isset( $settings['selected_directories'] ) && is_array( $settings['selected_directories'] ) ? $settings['selected_directories'] : [];
+    $settings      = get_option( KAPL_SETTINGS_OPTION_NAME, [ 'selected_directories' => [] ] );
+    $selected_dirs = isset( $settings['selected_directories'] ) && is_array( $settings['selected_directories'] ) ? $settings['selected_directories'] : [];
 
 	$upload_dir_info = wp_upload_dir();
 	$uploads_path = $upload_dir_info['basedir'];
@@ -420,7 +420,20 @@ function kapl_settings_page_html() {
             add_settings_error( 'kapl_rebuild_status', 'rebuild_success', $rebuild_message, 'updated' );
         } else {
             // Display error message from WP_Error
-             add_settings_error( 'kapl_rebuild_status', 'rebuild_error', esc_html__( 'Error rebuilding index: ', 'kiss-automated-pdf-linker' ) . $result->get_error_message(), 'error' );
+            $indexed_count = 0;
+            $data = $result->get_error_data();
+            if ( is_numeric( $data ) ) {
+                $indexed_count = (int) $data;
+            } elseif ( is_array( $data ) && isset( $data['count'] ) ) {
+                $indexed_count = (int) $data['count'];
+            }
+            $message = $result->get_error_message();
+            if ( $indexed_count > 0 ) {
+                $message = sprintf( esc_html__( 'Indexed %1$d files, but some issues occurred: %2$s', 'kiss-automated-pdf-linker' ), $indexed_count, $message );
+            } else {
+                $message = esc_html__( 'Error rebuilding index: ', 'kiss-automated-pdf-linker' ) . $message;
+            }
+            add_settings_error( 'kapl_rebuild_status', 'rebuild_error', $message, 'error' );
         }
     }
 
@@ -494,73 +507,71 @@ function kapl_build_pdf_index() {
 	$settings = get_option( KAPL_SETTINGS_OPTION_NAME, ['selected_directories' => []] );
 	$selected_dirs = isset( $settings['selected_directories'] ) && is_array( $settings['selected_directories'] ) ? $settings['selected_directories'] : [];
 
-	if ( empty( $selected_dirs ) ) {
-		// If no directories are selected, clear the index and return 0 count.
+    if ( empty( $selected_dirs ) ) {
+        // If no directories are selected, clear the index and return 0 count.
         kapl_update_pdf_index( [] );
-		return 0;
-	}
+        return 0;
+    }
 
-	$upload_dir_info = wp_upload_dir();
-	$uploads_base_path = trailingslashit( $upload_dir_info['basedir'] );
-	$pdf_index = [];
+    $upload_dir_info   = wp_upload_dir();
+    $uploads_base_path = trailingslashit( $upload_dir_info['basedir'] );
+    $pdf_index         = [];
+    $errors            = [];
 
-	foreach ( $selected_dirs as $dir_slug ) {
-		$scan_path = $uploads_base_path . $dir_slug;
 
-		if ( ! is_dir( $scan_path ) || ! is_readable( $scan_path ) ) {
-			// Skip directories that don't exist or aren't readable
-            // Optionally log this: error_log("KAPL: Directory not found or readable: " . $scan_path);
-			continue;
-		}
+    foreach ( $selected_dirs as $dir_slug ) {
+        $scan_path = $uploads_base_path . $dir_slug;
 
-		try {
-			// Use RecursiveDirectoryIterator to scan subdirectories
-			$directory_iterator = new RecursiveDirectoryIterator( $scan_path, RecursiveDirectoryIterator::SKIP_DOTS );
-            // Use RecursiveIteratorIterator to flatten the structure
-			$file_iterator = new RecursiveIteratorIterator( $directory_iterator, RecursiveIteratorIterator::LEAVES_ONLY );
+        if ( ! is_dir( $scan_path ) ) {
+            $errors[] = sprintf( __( 'Directory not found: %s', 'kiss-automated-pdf-linker' ), '<code>' . esc_html( $dir_slug ) . '</code>' );
+            continue;
+        }
 
-			foreach ( $file_iterator as $fileinfo ) {
-				// Check if it's a readable file and has a .pdf extension (case-insensitive)
-				if ( $fileinfo->isFile() && $fileinfo->isReadable() && strtolower( $fileinfo->getExtension() ) === 'pdf' ) {
-                    $full_path = $fileinfo->getPathname();
-                    // Store path relative to the uploads directory for URL generation later
-                    $relative_path = str_replace( $uploads_base_path, '', $full_path );
-                    $filename = $fileinfo->getFilename();
+        if ( ! is_readable( $scan_path ) ) {
+            $errors[] = sprintf( __( 'Directory not readable: %s', 'kiss-automated-pdf-linker' ), '<code>' . esc_html( $dir_slug ) . '</code>' );
+            continue;
+        }
+
+        try {
+            $directory_iterator = new RecursiveDirectoryIterator( $scan_path, RecursiveDirectoryIterator::SKIP_DOTS );
+            $file_iterator      = new RecursiveIteratorIterator( $directory_iterator, RecursiveIteratorIterator::LEAVES_ONLY );
+
+            foreach ( $file_iterator as $fileinfo ) {
+                if ( $fileinfo->isFile() && $fileinfo->isReadable() && strtolower( $fileinfo->getExtension() ) === 'pdf' ) {
+                    $full_path       = $fileinfo->getPathname();
+                    $relative_path   = str_replace( $uploads_base_path, '', $full_path );
+                    $filename        = $fileinfo->getFilename();
                     $normalized_name = kapl_normalize_filename( $filename );
 
-					$pdf_index[] = [
-						'path'            => $relative_path, // e.g., '2024/04/document.pdf' or 'coas/report.pdf'
-						'filename'        => $filename,      // e.g., 'document.pdf'
-						'normalized_name' => $normalized_name // e.g., 'document'
-					];
-				}
-			}
-		} catch ( Exception $e ) {
-			// Return error if scanning fails for a directory
-			return new WP_Error( 'scan_error', sprintf(
-                /* translators: 1: Directory path, 2: Error message */
-                __( 'Error scanning directory %1$s: %2$s', 'kiss-automated-pdf-linker' ),
-                '<code>' . esc_html( $dir_slug ) . '</code>',
-                esc_html( $e->getMessage() )
-            ) );
-		}
-	} // End foreach selected_dirs
-
+                    $pdf_index[] = [
+                        'path'            => $relative_path,
+                        'filename'        => $filename,
+                        'normalized_name' => $normalized_name,
+                    ];
+                }
+            }
+        } catch ( Exception $e ) {
+            $errors[] = sprintf( __( 'Error scanning directory %1$s: %2$s', 'kiss-automated-pdf-linker' ), '<code>' . esc_html( $dir_slug ) . '</code>', esc_html( $e->getMessage() ) );
+            continue;
+        }
+    }
     // Sort the index alphabetically by relative path for consistency
     usort($pdf_index, function($a, $b) {
         return strcmp($a['path'], $b['path']);
     });
+    // Save the index to the database
+    $update_success = kapl_update_pdf_index( $pdf_index );
 
-	// Save the index to the database
-	$update_success = kapl_update_pdf_index( $pdf_index );
-
-    if( ! $update_success ) {
-        return new WP_Error('save_error', __('Failed to save the PDF index to the database.', 'kiss-automated-pdf-linker'));
+    if ( ! $update_success ) {
+        $errors[] = __( 'Failed to save the PDF index to the database.', 'kiss-automated-pdf-linker' );
     }
 
-	// Return the count of indexed files
-	return count( $pdf_index );
-}
+    if ( ! empty( $errors ) ) {
+        return new WP_Error( 'kapl_index_warnings', implode( '<br>', $errors ), count( $pdf_index ) );
+    }
+
+    // Return the count of indexed files
+    return count( $pdf_index );
 
 
 // ==========================================================================
