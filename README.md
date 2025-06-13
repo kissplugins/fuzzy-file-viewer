@@ -6,7 +6,7 @@
 **Requires at least:** 5.2
 **Tested up to:** 6.5
 **Requires PHP:** 7.4
-**Stable tag:** 2.0.0
+**Stable tag:** 2.1.1
 **License:** GPLv2 or later
 **License URI:** <https://www.gnu.org/licenses/gpl-2.0.html>
 
@@ -109,6 +109,9 @@ It uses PHP's `similar_text()` function to compare the normalized `name` attribu
 
 ## Changelog
 
+### 2.1.1 - 2025-05-01
+
+* Enhancement: More robust folder scanning and detailed error messages during index rebuild.
 ### 2.0.0 - 2025-04-28
 
 * MAJOR REFACTOR: Renamed plugin to "KISS Automated PDF Linker".
